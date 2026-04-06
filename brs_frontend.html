@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BRS — Bus Reservation System (MySQL)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a; --panel:#111827; --card:#1a2236;
+  --border:#252f45; --border2:#2e3d5a;
+  --cyan:#00d4ff; --cyan-dim:#00d4ff22;
+  --green:#00e5a0; --green-dim:#00e5a022;
+  --orange:#ff7c3a; --orange-dim:#ff7c3a22;
+  --purple:#a78bfa; --purple-dim:#a78bfa22;
+  --yellow:#fbbf24; --yellow-dim:#fbbf2422;
+  --red:#f87171; --red-dim:#f8717122;
+  --text:#e2e8f0; --muted:#64748b; --muted2:#94a3b8;
+  --font-mono:'Space Mono',monospace;
+  --font-ui:'Outfit',sans-serif;
+  --r:10px; --shadow:0 4px 24px #00000060; --shadow-lg:0 12px 48px #00000080;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ── NAVBAR ─────────────────────────────── */
+nav{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 clamp(1rem,3vw,2.5rem);height:60px;
+  background:var(--panel);border-bottom:1px solid var(--border);
+}
+.nav-logo{font-family:var(--font-mono);font-size:1.1rem;font-weight:700;color:var(--cyan)}
+.nav-logo span{color:var(--text)}
+.db-status{
+  display:flex;align-items:center;gap:.5rem;
+  font-size:.75rem;font-family:var(--font-mono);
+}
+.db-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s}
+.db-dot.connected{background:var(--green);box-shadow:0 0 8px var(--green)}
+.db-dot.error{background:var(--red)}
+.db-label{color:var(--muted2)}
+.nav-tabs{display:flex;gap:.3rem}
+.nav-tab{
+  padding:.4rem .9rem;border-radius:6px;border:none;cursor:pointer;
+  font-family:var(--font-ui);font-size:.82rem;font-weight:500;
+  background:transparent;color:var(--muted2);transition:all .2s;
+}
+.nav-tab:hover{background:var(--card);color:var(--text)}
+.nav-tab.active{background:var(--cyan-dim);color:var(--cyan);border:1px solid #00d4ff33}
+.nav-badge{
+  display:inline-block;background:var(--green);color:var(--bg);
+  font-size:.65rem;font-weight:700;border-radius:99px;
+  padding:.1rem .4rem;margin-left:.4rem;
+}
+
+/* ── PAGES ──────────────────────────────── */
+.page{display:none;animation:fadeIn .3s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── HERO ───────────────────────────────── */
+.hero{
+  background:var(--panel);border-bottom:1px solid var(--border);
+  padding:clamp(2rem,5vw,3.5rem) clamp(1rem,4vw,3rem) 0;
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 80% at 80% 50%,#00d4ff0a,transparent 70%),
+             radial-gradient(ellipse 40% 60% at 5% 80%,#00e5a008,transparent 60%);
+}
+.hero-label{font-family:var(--font-mono);font-size:.7rem;color:var(--cyan);letter-spacing:.15em;text-transform:uppercase;margin-bottom:.8rem}
+.hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;letter-spacing:-1.5px;line-height:1.05;margin-bottom:.8rem}
+.hero h1 em{color:var(--cyan);font-style:normal}
+.hero p{color:var(--muted2);font-size:.95rem;max-width:460px;line-height:1.7;margin-bottom:2rem}
+
+/* MySQL badge in hero */
+.mysql-badge{
+  display:inline-flex;align-items:center;gap:.5rem;
+  background:var(--card);border:1px solid var(--border2);
+  border-radius:99px;padding:.3rem .9rem;
+  font-size:.75rem;font-family:var(--font-mono);color:var(--orange);
+  margin-bottom:1rem;
+}
+.mysql-badge::before{content:'🐬';font-size:.85rem}
+
+/* ── BOOKING CARD ───────────────────────── */
+.booking-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r) var(--r) 0 0;
+  padding:clamp(1.2rem,3vw,2rem);
+  box-shadow:var(--shadow-lg);position:relative;z-index:1;max-width:860px;
+}
+.card-label{
+  font-family:var(--font-mono);font-size:.7rem;
+  color:var(--muted);letter-spacing:.12em;text-transform:uppercase;
+  margin-bottom:1.2rem;display:flex;align-items:center;gap:.6rem;
+}
+.card-label::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
+.fg{display:flex;flex-direction:column;gap:.35rem}
+.fg label{font-size:.72rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.07em}
+.fg input,.fg select{
+  padding:.65rem .9rem;background:var(--bg);border:1.5px solid var(--border2);
+  border-radius:7px;color:var(--text);font-family:var(--font-ui);font-size:.9rem;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+.fg input:focus,.fg select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-dim)}
+.fg input.err,.fg select.err{border-color:var(--red)}
+.fg select option{background:var(--panel)}
+.search-btn{
+  margin-top:1rem;width:100%;padding:.85rem;
+  background:var(--cyan);color:var(--bg);border:none;border-radius:8px;
+  font-family:var(--font-mono);font-size:.9rem;font-weight:700;
+  cursor:pointer;transition:all .2s;box-shadow:0 4px 20px var(--cyan-dim);
+}
+.search-btn:hover{background:#33ddff;transform:translateY(-1px)}
+.search-btn:active{transform:translateY(0)}
+.search-btn:disabled{background:var(--border);cursor:not-allowed;box-shadow:none}
+
+/* ── CONTENT ────────────────────────────── */
+.content{max-width:860px;padding:0 clamp(1rem,4vw,3rem)}
+.sec-head{display:flex;align-items:center;gap:.8rem;margin:2rem 0 1rem}
+.sec-head h2{font-size:1.1rem;font-weight:700;font-family:var(--font-mono)}
+.sec-head .pill{font-size:.7rem;padding:.2rem .6rem;border-radius:99px;background:var(--border);color:var(--muted2);font-family:var(--font-mono)}
+
+/* ── BUS CARDS ──────────────────────────── */
+#results-sec{display:none}
+.bus-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:1.2rem 1.5rem;margin-bottom:.8rem;
+  display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;
+  transition:border-color .2s,transform .2s,box-shadow .2s;
+  animation:slideUp .3s ease both;
+}
+.bus-card:hover{border-color:var(--cyan);transform:translateY(-2px);box-shadow:0 8px 32px #00d4ff15}
+@keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.bc-name{font-weight:700;font-size:1rem;margin-bottom:.25rem}
+.bc-op{font-size:.75rem;color:var(--muted2);margin-bottom:.5rem}
+.type-badge{display:inline-block;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:4px;margin-left:.5rem;letter-spacing:.06em;text-transform:uppercase}
+.t-ac{background:var(--cyan-dim);color:var(--cyan)}
+.t-nonac{background:var(--yellow-dim);color:var(--yellow)}
+.t-sleeper{background:var(--purple-dim);color:var(--purple)}
+.bc-times{display:flex;align-items:center;gap:.8rem;font-size:.88rem;color:var(--muted2)}
+.bc-times .t{font-weight:700;color:var(--text);font-size:1.05rem}
+.bc-times .arr{color:var(--cyan)}
+.bc-meta{display:flex;gap:1.2rem;margin-top:.6rem;font-size:.78rem;color:var(--muted)}
+.bc-meta strong{color:var(--green)}
+.bc-amenities{display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap}
+.amenity{font-size:.65rem;background:var(--border);color:var(--muted2);padding:.15rem .5rem;border-radius:4px}
+.price-col{text-align:right}
+.price{font-family:var(--font-mono);font-size:1.5rem;font-weight:700;color:var(--orange)}
+.price sub{font-size:.6rem;font-weight:400;color:var(--muted)}
+.book-btn{
+  display:block;margin-top:.5rem;padding:.55rem 1.2rem;
+  background:transparent;border:1.5px solid var(--cyan);color:var(--cyan);
+  border-radius:7px;font-family:var(--font-mono);font-size:.78rem;font-weight:700;
+  cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.book-btn:hover{background:var(--cyan);color:var(--bg)}
+
+/* ── SEAT MODAL ─────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:#00000099;backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;padding:1rem;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--panel);border:1px solid var(--border2);border-radius:var(--r);
+  width:100%;max-width:520px;max-height:92vh;overflow-y:auto;
+  box-shadow:var(--shadow-lg);animation:popIn .25s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes popIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 1.5rem .9rem;border-bottom:1px solid var(--border)}
+.modal-hdr h3{font-family:var(--font-mono);font-size:.95rem;color:var(--cyan)}
+.modal-close{width:30px;height:30px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--muted2);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;transition:background .2s}
+.modal-close:hover{background:var(--card)}
+.modal-body{padding:1.2rem 1.5rem}
+.bus-layout{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.2rem}
+.bus-front{text-align:center;font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;border-bottom:1px dashed var(--border2);padding-bottom:.6rem;margin-bottom:.9rem}
+.bus-front span{font-size:1.2rem;display:block;margin-bottom:.2rem}
+.seat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.45rem;justify-items:center}
+.aisle{visibility:hidden}
+.seat{width:38px;height:38px;border-radius:5px 5px 3px 3px;border:1.5px solid var(--border2);background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.65rem;color:var(--muted2);transition:all .15s;user-select:none}
+.seat:hover:not(.occ){border-color:var(--cyan);color:var(--cyan);transform:scale(1.1)}
+.seat.sel{background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-weight:700}
+.seat.occ{background:var(--border);border-color:var(--border);color:var(--muted);cursor:not-allowed}
+.legend{display:flex;gap:.8rem;margin-top:.7rem;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--muted2)}
+.leg-dot{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--border2)}
+.leg-dot.a{background:var(--card)}.leg-dot.s{background:var(--cyan);border-color:var(--cyan)}.leg-dot.o{background:var(--border)}
+.bk-summary{background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:.9rem 1.1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:1rem}
+.bs-seats{font-size:.8rem;color:var(--muted2)}
+.bs-seats strong{display:block;font-family:var(--font-mono);font-size:.9rem;color:var(--text)}
+.bs-price{font-family:var(--font-mono);font-size:1.4rem;font-weight:700;color:var(--green)}
+.confirm-btn{width:100%;padding:.85rem;background:var(--green);color:var(--bg);border:none;border-radius:8px;font-family:var(--font-mono);font-size:.88rem;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px var(--green-dim)}
+.confirm-btn:hover{background:#11ffb5}
+.confirm-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;box-shadow:none}
+
+/* ── TICKET ─────────────────────────────── */
+#confirm-sec{display:none;padding:2rem 0 4rem}
+.ticket{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;max-width:560px;margin:0 auto;box-shadow:var(--shadow-lg);animation:slideUp .4s ease both}
+.tkt-hdr{background:linear-gradient(135deg,#0d1b2a,#0a1628);border-bottom:1px solid var(--border2);padding:1.4rem 1.8rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem}
+.tkt-hdr-left .tick{font-size:1.8rem;display:block;margin-bottom:.3rem}
+.tkt-hdr-left h2{font-family:var(--font-mono);font-size:1rem;color:var(--green)}
+.tkt-hdr-right{text-align:right}
+.bid-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.bid-val{font-family:var(--font-mono);font-size:1.1rem;color:var(--cyan);font-weight:700}
+.tkt-route{padding:1.2rem 1.8rem;display:flex;align-items:center;gap:.8rem;border-bottom:1px dashed var(--border)}
+.tkt-city{font-family:var(--font-mono);font-size:1.3rem;font-weight:700}
+.tkt-arrow{color:var(--orange);font-size:1.5rem;flex:1;text-align:center}
+.tkt-fields{padding:1.2rem 1.8rem;display:grid;grid-template-columns:1fr 1fr;gap:.9rem;border-bottom:1px dashed var(--border)}
+.tkt-f .lbl{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tkt-f .val{font-weight:600;margin-top:.1rem;font-size:.9rem}
+.tkt-footer{padding:1.2rem 1.8rem;display:flex;justify-content:space-between;align-items:center;background:var(--bg)}
+.tkt-total{font-family:var(--font-mono);font-size:1.6rem;font-weight:700;color:var(--orange)}
+.tkt-total sub{font-size:.6rem;color:var(--muted)}
+.new-bk-btn{padding:.55rem 1.2rem;border:1.5px solid var(--border2);border-radius:7px;background:transparent;color:var(--muted2);font-family:var(--font-mono);font-size:.75rem;cursor:pointer;transition:all .2s}
+.new-bk-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+
+/* ── DB EXPLORER ────────────────────────── */
+.db-page{padding:1.5rem clamp(1rem,4vw,2.5rem) 4rem}
+.db-page-hdr{margin-bottom:1.5rem}
+.db-page-hdr h1{font-family:var(--font-mono);font-size:1.4rem;font-weight:700;margin-bottom:.3rem}
+.db-page-hdr p{color:var(--muted2);font-size:.85rem}
+.db-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.8rem;margin-bottom:1.5rem}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;transition:border-color .2s}
+.stat-card:hover{border-color:var(--border2)}
+.stat-num{font-family:var(--font-mono);font-size:1.6rem;font-weight:700}
+.stat-label{font-size:.72rem;color:var(--muted2);margin-top:.2rem}
+.db-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1.2rem}
+.db-tab{padding:.45rem 1rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted2);cursor:pointer;font-family:var(--font-mono);font-size:.75rem;transition:all .2s;display:flex;align-items:center;gap:.4rem}
+.db-tab:hover{border-color:var(--border2);color:var(--text)}
+.db-tab.active{border-color:currentColor;background:var(--card)}
+.db-tab.t-buses{color:var(--cyan)}.db-tab.t-operators{color:var(--yellow)}.db-tab.t-routes{color:var(--green)}.db-tab.t-cities{color:var(--purple)}.db-tab.t-passengers{color:var(--orange)}.db-tab.t-bookings{color:var(--red)}
+.db-tab .rc{background:currentColor;color:var(--bg);font-size:.6rem;font-weight:700;border-radius:3px;padding:.1rem .35rem;opacity:.9}
+.db-table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+thead tr{background:var(--bg);border-bottom:1px solid var(--border2)}
+thead th{padding:.7rem 1rem;text-align:left;font-family:var(--font-mono);font-size:.68rem;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--card)}
+tbody td{padding:.65rem 1rem;color:var(--text);vertical-align:middle}
+tbody td:first-child{font-family:var(--font-mono);color:var(--muted);font-size:.75rem}
+.cell-badge{display:inline-block;padding:.15rem .55rem;border-radius:4px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.cb-cyan{background:var(--cyan-dim);color:var(--cyan)}.cb-green{background:var(--green-dim);color:var(--green)}.cb-yellow{background:var(--yellow-dim);color:var(--yellow)}.cb-purple{background:var(--purple-dim);color:var(--purple)}.cb-orange{background:var(--orange-dim);color:var(--orange)}.cb-red{background:var(--red-dim);color:var(--red)}.cb-grey{background:var(--border);color:var(--muted2)}
+.loading-row td{text-align:center;padding:2rem;color:var(--muted);font-family:var(--font-mono);font-size:.8rem}
+
+/* Connection error banner */
+.conn-banner{
+  background:var(--red-dim);border:1px solid var(--red);color:var(--red);
+  border-radius:8px;padding:1rem 1.2rem;margin-bottom:1.2rem;
+  font-size:.85rem;line-height:1.6;display:none;
+}
+.conn-banner.show{display:block}
+.conn-banner strong{display:block;margin-bottom:.3rem;font-family:var(--font-mono)}
+
+/* ── TOAST ──────────────────────────────── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(4rem);background:var(--card);border:1px solid var(--border2);color:var(--text);padding:.65rem 1.2rem;border-radius:99px;font-size:.82rem;font-weight:500;opacity:0;transition:opacity .3s,transform .3s;z-index:999;pointer-events:none;white-space:nowrap;box-shadow:var(--shadow)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(max-width:600px){.bus-card{grid-template-columns:1fr}.price-col{display:flex;align-items:center;justify-content:space-between}.tkt-fields{grid-template-columns:1fr}.nav-tabs{gap:.2rem}.nav-tab{padding:.4rem .6rem;font-size:.75rem}}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav>
+  <div class="nav-logo">B<span>RS</span></div>
+  <div class="db-status">
+    <div class="db-dot" id="db-dot"></div>
+    <span class="db-label" id="db-label">Connecting to MySQL...</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('booking')">🚌 Book</button>
+    <button class="nav-tab" onclick="showPage('database')">🗄️ Database <span class="nav-badge">MySQL</span></button>
+  </div>
+</nav>
+
+<!-- ════ PAGE 1 — BOOKING ════ -->
+<div class="page active" id="page-booking">
+  <section class="hero">
+    <div class="hero-label">// connected to mysql database</div>
+    <div class="mysql-badge">MySQL + Node.js Backend</div>
+    <h1>Travel smarter.<br><em>Book faster.</em></h1>
+    <p>Real data, real bookings — every search, seat selection, and confirmation is saved to a live MySQL database.</p>
+    <div class="content">
+      <div class="conn-banner" id="conn-banner">
+        <strong>⚠️ Cannot connect to MySQL backend</strong>
+        Make sure your Node.js server is running:<br>
+        <code style="font-family:var(--font-mono);font-size:.8rem">node server.js</code> in the project folder.
+        Server must be at <code style="font-family:var(--font-mono);font-size:.8rem">http://localhost:3000</code>
+      </div>
+      <div class="booking-card">
+        <div class="card-label">Search Form — Live MySQL Data</div>
+        <div class="form-grid">
+          <div class="fg">
+            <label>Passenger Name</label>
+            <input type="text" id="pname" placeholder="Your full name"/>
+          </div>
+          <div class="fg">
+            <label>From City</label>
+            <select id="fcity"><option value="">Loading cities...</option></select>
+          </div>
+          <div class="fg">
+            <label>To City</label>
+            <select id="tcity"><option value="">Loading cities...</option></select>
+          </div>
+          <div class="fg">
+            <label>Travel Date</label>
+            <input type="date" id="tdate"/>
+          </div>
+          <div class="fg">
+            <label>Passengers</label>
+            <select id="npax">
+              <option value="">How many?</option>
+              <option>1</option><option>2</option><option>3</option>
+              <option>4</option><option>5</option><option>6</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Bus Type</label>
+            <select id="btype">
+              <option value="">Any type</option>
+              <option value="AC">AC</option>
+              <option value="Non-AC">Non-AC</option>
+              <option value="Sleeper">Sleeper</option>
+            </select>
+          </div>
+        </div>
+        <button class="search-btn" id="search-btn" onclick="searchBuses()">⟶ Search Available Buses</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="content">
+    <section id="results-sec">
+      <div class="sec-head">
+        <h2>Available Buses</h2>
+        <span class="pill" id="res-count">0 found</span>
+        <span class="pill" style="color:var(--orange);background:var(--orange-dim)">🐬 MySQL</span>
+      </div>
+      <div id="bus-list"></div>
+    </section>
+    <section id="confirm-sec">
+      <div class="sec-head"><h2>Booking Confirmed</h2></div>
+      <div class="ticket" id="ticket-card"></div>
+    </section>
+  </div>
+</div>
+
+<!-- ════ PAGE 2 — DATABASE EXPLORER ════ -->
+<div class="page" id="page-database">
+  <div class="db-page">
+    <div class="db-page-hdr">
+      <h1>// MySQL Database Explorer</h1>
+      <p>Live data from <strong style="color:var(--orange)">brs_db</strong> MySQL database. All records are real and persistent.</p>
+    </div>
+    <div class="db-stats">
+      <div class="stat-card"><div class="stat-num" style="color:var(--cyan)"  id="s-buses">—</div><div class="stat-label">Buses</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--yellow)"id="s-operators">—</div><div class="stat-label">Operators</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--green)" id="s-routes">—</div><div class="stat-label">Routes</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--purple)"id="s-cities">—</div><div class="stat-label">Cities</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--orange)"id="s-passengers">—</div><div class="stat-label">Passengers</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--red)"   id="s-bookings">—</div><div class="stat-label">Bookings</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--green);font-size:1.1rem" id="s-revenue">—</div><div class="stat-label">Revenue</div></div>
+    </div>
+    <div class="db-tabs">
+      <button class="db-tab t-buses active"      onclick="showDb('buses')">🚌 buses <span class="rc" id="rc-buses">0</span></button>
+      <button class="db-tab t-operators"          onclick="showDb('operators')">🏢 operators <span class="rc" id="rc-operators">0</span></button>
+      <button class="db-tab t-routes"             onclick="showDb('routes')">🛣️ routes <span class="rc" id="rc-routes">0</span></button>
+      <button class="db-tab t-cities"             onclick="showDb('cities')">🏙️ cities <span class="rc" id="rc-cities">0</span></button>
+      <button class="db-tab t-passengers"         onclick="showDb('passengers')">👤 passengers <span class="rc" id="rc-passengers">0</span></button>
+      <button class="db-tab t-bookings"           onclick="showDb('bookings')">🎟️ bookings <span class="rc" id="rc-bookings">0</span></button>
+    </div>
+    <div class="db-table-wrap" id="db-table-container">
+      <table><tbody><tr class="loading-row"><td colspan="10">⏳ Connecting to MySQL...</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- SEAT MODAL -->
+<div class="modal-overlay" id="seat-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="modal-bus-name">Select Seats</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="bus-layout">
+        <div class="bus-front"><span>🚌</span>FRONT / DRIVER</div>
+        <div class="seat-grid" id="seat-grid"></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot a"></div>Available</div>
+          <div class="leg-item"><div class="leg-dot s"></div>Selected</div>
+          <div class="leg-item"><div class="leg-dot o"></div>Occupied</div>
+        </div>
+      </div>
+      <div class="bk-summary">
+        <div class="bs-seats">
+          <strong id="sel-seat-labels">No seats selected</strong>
+          <span id="sel-count-text">Pick seats to continue</span>
+        </div>
+        <div class="bs-price" id="modal-total">₹0</div>
+      </div>
+      <button class="confirm-btn" id="confirm-btn" onclick="confirmBooking()" disabled>Confirm & Save to MySQL</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════════════════
+     JAVASCRIPT — API calls to Node.js/MySQL
+════════════════════════════════════════ -->
+<script>
+// ── CONFIG — Backend API URL ─────────────────────────────────
+const API = 'http://localhost:3000/api';
+
+// ── State ────────────────────────────────────────────────────
+let currentBus    = null;
+let selectedSeats = [];
+let numPassengers = 1;
+let searchParams  = {};
+let allCities     = [];
+let isConnected   = false;
+
+// ── On Load ──────────────────────────────────────────────────
+document.getElementById('tdate').min = new Date().toISOString().split('T')[0];
+initApp();
+
+async function initApp() {
+  await checkConnection();
+  if (isConnected) {
+    loadCities();
+    loadStats();
+    showDb('buses');
+  }
+}
+
+// ── Check MySQL connection via API ───────────────────────────
+async function checkConnection() {
+  try {
+    const res = await fetch(`${API}/stats`, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error('Bad response');
+    isConnected = true;
+    document.getElementById('db-dot').classList.add('connected');
+    document.getElementById('db-label').textContent = 'MySQL Connected ✓';
+    document.getElementById('conn-banner').classList.remove('show');
+  } catch {
+    isConnected = false;
+    document.getElementById('db-dot').classList.add('error');
+    document.getElementById('db-label').textContent = 'MySQL Offline ✗';
+    document.getElementById('conn-banner').classList.add('show');
+    document.getElementById('search-btn').disabled = true;
+    document.getElementById('db-table-container').innerHTML =
+      '<table><tbody><tr class="loading-row"><td colspan="10">❌ Cannot reach MySQL server. Run: <strong>node server.js</strong></td></tr></tbody></table>';
+  }
+}
+
+// ── Load cities into dropdowns FROM MySQL ────────────────────
+async function loadCities() {
+  try {
+    const res  = await fetch(`${API}/cities`);
+    allCities  = await res.json();
+    ['fcity','tcity'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">Select city...</option>';
+      allCities.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.name; opt.textContent = c.name;
+        sel.appendChild(opt);
+      });
+    });
+  } catch { showToast('⚠️ Failed to load cities from MySQL'); }
+}
+
+// ── Load dashboard stats FROM MySQL ─────────────────────────
+async function loadStats() {
+  try {
+    const res  = await fetch(`${API}/stats`);
+    const data = await res.json();
+    document.getElementById('s-buses').textContent      = data.buses;
+    document.getElementById('s-operators').textContent  = data.operators;
+    document.getElementById('s-routes').textContent     = data.routes;
+    document.getElementById('s-cities').textContent     = data.cities;
+    document.getElementById('s-passengers').textContent = data.passengers;
+    document.getElementById('s-bookings').textContent   = data.bookings;
+    document.getElementById('s-revenue').textContent    = '₹' + Number(data.revenue).toLocaleString('en-IN');
+    document.getElementById('rc-buses').textContent      = data.buses;
+    document.getElementById('rc-operators').textContent  = data.operators;
+    document.getElementById('rc-routes').textContent     = data.routes;
+    document.getElementById('rc-cities').textContent     = data.cities;
+    document.getElementById('rc-passengers').textContent = data.passengers;
+    document.getElementById('rc-bookings').textContent   = data.bookings;
+  } catch {}
+}
+
+// ── PAGE NAVIGATION ──────────────────────────────────────────
+function showPage(p) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['booking','database'][i] === p);
+  });
+  if (p === 'database' && isConnected) { loadStats(); showDb('buses'); }
+}
+
+// ── DB EXPLORER — fetch from MySQL and render ─────────────────
+async function showDb(db) {
+  document.querySelectorAll('.db-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.db-tab.t-'+db).classList.add('active');
+  const container = document.getElementById('db-table-container');
+  container.innerHTML = '<table><tbody><tr class="loading-row"><td colspan="10">⏳ Querying MySQL...</td></tr></tbody></table>';
+
+  try {
+    const endpoints = {
+      buses:'buses', operators:'operators', routes:'routes',
+      cities:'cities', passengers:'passengers', bookings:'bookings'
+    };
+    const res  = await fetch(`${API}/${endpoints[db]}`);
+    const data = await res.json();
+    const renderers = { buses:renderBuses, operators:renderOperators, routes:renderRoutes, cities:renderCities, passengers:renderPassengers, bookings:renderBookings };
+    container.innerHTML = renderers[db](data);
+  } catch {
+    container.innerHTML = '<table><tbody><tr class="loading-row"><td colspan="10">❌ Failed to fetch from MySQL</td></tr></tbody></table>';
+  }
+}
+
+// Table render functions
+function renderBuses(data) {
+  const rows = data.map(b => {
+    const bc = {AC:'cb-cyan','Non-AC':'cb-yellow','Sleeper':'cb-purple'}[b.type];
+    const am = (b.amenities||[]).map(a=>`<span class="cell-badge cb-grey">${a}</span>`).join(' ');
+    return `<tr><td>${b.bus_id}</td><td><strong>${b.name}</strong></td><td><span class="cell-badge ${bc}">${b.type}</span></td><td>${b.operator_name||'—'} ⭐${b.operator_rating||''}</td><td>${b.departure} → ${b.arrival}</td><td style="color:var(--orange);font-family:var(--font-mono)">₹${b.price}</td><td><span style="color:var(--green)">${b.available_seats}</span>/${b.total_seats}</td><td>${am||'—'}</td></tr>`;
+  }).join('');
+  return `<table><thead><tr><th>bus_id</th><th>name</th><th>type</th><th>operator</th><th>schedule</th><th>price</th><th>seats</th><th>amenities</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderOperators(data) {
+  const rows = data.map(o => `<tr><td>${o.operator_id}</td><td><strong>${o.name}</strong></td><td>${o.founded}</td><td style="color:var(--yellow)">★ ${o.rating}</td><td>${o.fleet_size} buses</td><td>${o.hq_city_name||o.hq_city_id}</td><td style="font-family:var(--font-mono);font-size:.75rem;color:var(--muted2)">${o.contact}</td></tr>`).join('');
+  return `<table><thead><tr><th>operator_id</th><th>name</th><th>founded</th><th>rating</th><th>fleet</th><th>hq_city</th><th>contact</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderRoutes(data) {
+  const rows = data.map(r => `<tr><td>${r.route_id}</td><td><strong>${r.from_city_name}</strong></td><td><strong>${r.to_city_name}</strong></td><td>${r.distance_km} km</td><td>${r.duration_hrs} hrs</td><td style="color:var(--muted2);font-family:var(--font-mono);font-size:.75rem">${r.highway}</td><td>${r.popular?'<span class="cell-badge cb-green">YES</span>':'<span class="cell-badge cb-grey">NO</span>'}</td></tr>`).join('');
+  return `<table><thead><tr><th>route_id</th><th>from</th><th>to</th><th>distance</th><th>duration</th><th>highway</th><th>popular</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderCities(data) {
+  const rows = data.map(c => `<tr><td>${c.city_id}</td><td><strong>${c.name}</strong></td><td>${c.state}</td><td>${c.population}</td><td style="font-size:.75rem;color:var(--muted2)">${c.terminal}</td><td style="font-family:var(--font-mono);font-size:.72rem;color:var(--muted)">${c.lat}, ${c.lng}</td></tr>`).join('');
+  return `<table><thead><tr><th>city_id</th><th>name</th><th>state</th><th>population</th><th>terminal</th><th>coordinates</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderPassengers(data) {
+  const rows = data.map(p => `<tr><td>${p.passenger_id}</td><td><strong>${p.name}</strong></td><td style="color:var(--muted2);font-size:.78rem">${p.email}</td><td style="font-family:var(--font-mono);font-size:.78rem">${p.phone}</td><td>${p.city_name||p.city_id}</td><td><span style="color:var(--yellow)">★</span> ${p.loyalty_pts} pts</td></tr>`).join('');
+  return `<table><thead><tr><th>passenger_id</th><th>name</th><th>email</th><th>phone</th><th>city</th><th>loyalty</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderBookings(data) {
+  const rows = data.map(b => {
+    const st = b.status==='confirmed'?'<span class="cell-badge cb-green">CONFIRMED</span>':b.status==='cancelled'?'<span class="cell-badge cb-red">CANCELLED</span>':'<span class="cell-badge cb-yellow">PENDING</span>';
+    return `<tr><td style="color:var(--cyan)">${b.booking_id}</td><td>${b.passenger_name}</td><td style="font-size:.78rem">${b.bus_name}</td><td>${b.from_city_name} → ${b.to_city_name}</td><td>${b.travel_date?.split('T')[0]||b.travel_date}</td><td style="font-family:var(--font-mono)">[${b.seats}]</td><td style="color:var(--orange);font-family:var(--font-mono)">₹${Number(b.total).toLocaleString('en-IN')}</td><td>${st}</td></tr>`;
+  }).join('');
+  return `<table><thead><tr><th>booking_id</th><th>passenger</th><th>bus</th><th>route</th><th>date</th><th>seats</th><th>total</th><th>status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ── FORM VALIDATION ──────────────────────────────────────────
+function validateForm() {
+  const ids = ['pname','fcity','tcity','tdate','npax'];
+  let ok = true;
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('err');
+    if (!el.value.trim()) { el.classList.add('err'); ok = false; }
+  });
+  if (!ok) { showToast('⚠️ Please fill all required fields'); return false; }
+  if (document.getElementById('fcity').value === document.getElementById('tcity').value) {
+    ['fcity','tcity'].forEach(id => document.getElementById(id).classList.add('err'));
+    showToast('⚠️ From and To cities cannot be the same!');
+    return false;
+  }
+  return true;
+}
+
+// ── SEARCH BUSES — fetches from MySQL ───────────────────────
+async function searchBuses() {
+  if (!validateForm()) return;
+  searchParams = {
+    name: document.getElementById('pname').value.trim(),
+    from: document.getElementById('fcity').value,
+    to:   document.getElementById('tcity').value,
+    date: document.getElementById('tdate').value,
+    pax:  parseInt(document.getElementById('npax').value),
+    type: document.getElementById('btype').value,
+  };
+  numPassengers = searchParams.pax;
+
+  const btn = document.getElementById('search-btn');
+  btn.disabled = true; btn.textContent = '⏳ Querying MySQL...';
+
+  try {
+    const url = `${API}/buses${searchParams.type ? '?type=' + encodeURIComponent(searchParams.type) : ''}`;
+    const res  = await fetch(url);
+    const buses = await res.json();
+
+    const listEl = document.getElementById('bus-list');
+    const resSec = document.getElementById('results-sec');
+    const conSec = document.getElementById('confirm-sec');
+    document.getElementById('res-count').textContent = buses.length + ' found';
+    conSec.style.display = 'none';
+    resSec.style.display = 'block';
+    listEl.innerHTML = '';
+
+    if (!buses.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);padding:1.5rem 0">No buses found. Try "Any type".</p>';
+      return;
+    }
+
+    buses.forEach((bus, i) => {
+      const bc  = {AC:'t-ac','Non-AC':'t-nonac','Sleeper':'t-sleeper'}[bus.type];
+      const am  = (bus.amenities||[]).map(a=>`<span class="amenity">${a}</span>`).join('');
+      const card = document.createElement('div');
+      card.className = 'bus-card';
+      card.style.animationDelay = (i * 0.07) + 's';
+      card.innerHTML = `
+        <div>
+          <div class="bc-name">${bus.name} <span class="type-badge ${bc}">${bus.type}</span></div>
+          <div class="bc-op">🏢 ${bus.operator_name||''} &nbsp;⭐ ${bus.operator_rating||''}</div>
+          <div class="bc-times"><span class="t">${bus.departure}</span><span class="arr">→</span><span class="t">${bus.arrival}</span></div>
+          <div class="bc-meta"><span>🛣️ ${searchParams.from} → ${searchParams.to}</span><span>💺 <strong>${bus.available_seats} seats left</strong></span></div>
+          <div class="bc-amenities">${am}</div>
+        </div>
+        <div class="price-col">
+          <div class="price">₹${bus.price}<sub>/person</sub></div>
+          <button class="book-btn" onclick='openSeatModal(${JSON.stringify(bus)})'>Book Now</button>
+        </div>`;
+      listEl.appendChild(card);
+    });
+    resSec.scrollIntoView({ behavior:'smooth', block:'start' });
+  } catch {
+    showToast('❌ Failed to fetch buses from MySQL');
+  } finally {
+    btn.disabled = false; btn.textContent = '⟶ Search Available Buses';
+  }
+}
+
+// ── SEAT MODAL ───────────────────────────────────────────────
+function openSeatModal(bus) {
+  currentBus    = bus;
+  selectedSeats = [];
+  document.getElementById('modal-bus-name').textContent = bus.name;
+  document.getElementById('modal-total').textContent    = '₹0';
+  document.getElementById('sel-seat-labels').textContent = 'No seats selected';
+  document.getElementById('sel-count-text').textContent  = 'Pick at least 1 seat';
+  document.getElementById('confirm-btn').disabled        = true;
+  buildSeatGrid();
+  document.getElementById('seat-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function buildSeatGrid() {
+  const grid = document.getElementById('seat-grid');
+  const total = currentBus.total_seats;
+  const occ   = generateOccupied(total, total - currentBus.available_seats);
+  grid.innerHTML = '';
+  const rows = Math.ceil(total / 4);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < 5; c++) {
+      if (c === 2) { const sp = document.createElement('div'); sp.className='aisle'; grid.appendChild(sp); continue; }
+      const idx = r * 4 + (c < 2 ? c : c - 1);
+      if (idx >= total) { grid.appendChild(document.createElement('div')); continue; }
+      const sn = idx + 1, seat = document.createElement('div');
+      seat.className = 'seat' + (occ.includes(sn) ? ' occ' : '');
+      seat.textContent = sn; seat.dataset.seat = sn;
+      if (!occ.includes(sn)) seat.addEventListener('click', () => toggleSeat(seat, sn));
+      grid.appendChild(seat);
+    }
+  }
+}
+
+function generateOccupied(total, count) {
+  const pool = Array.from({length:total},(_,i)=>i+1), occ = [];
+  while (occ.length < count && pool.length) occ.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  return occ;
+}
+
+function toggleSeat(el, sn) {
+  if (el.classList.contains('sel')) {
+    el.classList.remove('sel'); selectedSeats = selectedSeats.filter(s=>s!==sn);
+  } else {
+    if (selectedSeats.length >= numPassengers) { showToast(`⚠️ Max ${numPassengers} seat(s) allowed`); return; }
+    el.classList.add('sel'); selectedSeats.push(sn);
+  }
+  updateSummary();
+}
+
+function updateSummary() {
+  const total = selectedSeats.length * currentBus.price;
+  document.getElementById('modal-total').textContent = '₹' + total.toLocaleString('en-IN');
+  const btn = document.getElementById('confirm-btn');
+  if (!selectedSeats.length) {
+    document.getElementById('sel-seat-labels').textContent = 'No seats selected';
+    document.getElementById('sel-count-text').textContent  = 'Pick at least 1 seat';
+    btn.disabled = true;
+  } else {
+    document.getElementById('sel-seat-labels').textContent = 'Seats: ' + selectedSeats.sort((a,b)=>a-b).join(', ');
+    document.getElementById('sel-count-text').textContent  = selectedSeats.length + ' seat(s) selected';
+    btn.disabled = false;
+  }
+}
+
+function closeModal() {
+  document.getElementById('seat-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('seat-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
+
+// ── CONFIRM BOOKING — writes to MySQL via API ────────────────
+async function confirmBooking() {
+  if (!selectedSeats.length) return;
+
+  const btn        = document.getElementById('confirm-btn');
+  btn.disabled     = true; btn.textContent = '⏳ Saving to MySQL...';
+
+  const bookingId  = 'RR' + Date.now().toString(36).toUpperCase();
+  const totalPrice = selectedSeats.length * currentBus.price;
+  const seatStr    = selectedSeats.sort((a,b)=>a-b).join(',');
+  const newPassId  = 'P' + Date.now().toString(36).toUpperCase();
+
+  // Find city_id from city name
+  const fromCity = allCities.find(c => c.name === searchParams.from);
+  const toCity   = allCities.find(c => c.name === searchParams.to);
+
+  try {
+    // 1. POST new passenger to MySQL
+    await fetch(`${API}/passengers`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        passenger_id: newPassId,
+        name:         searchParams.name,
+        email:        searchParams.name.toLowerCase().replace(/ /g,'') + Date.now() + '@brs.com',
+        phone:        '98' + Math.floor(Math.random()*1e8).toString().padStart(8,'0'),
+        city_id:      fromCity?.city_id || 'C001',
+        loyalty_pts:  Math.floor(totalPrice * 0.1),
+      })
+    });
+
+    // 2. POST new booking to MySQL
+    await fetch(`${API}/bookings`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        booking_id:   bookingId,
+        passenger_id: newPassId,
+        bus_id:       currentBus.bus_id,
+        from_city_id: fromCity?.city_id || 'C001',
+        to_city_id:   toCity?.city_id   || 'C002',
+        travel_date:  searchParams.date,
+        seats:        seatStr,
+        total:        totalPrice,
+      })
+    });
+
+    // 3. Show ticket
+    const dateStr = new Date(searchParams.date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+    document.getElementById('ticket-card').innerHTML = `
+      <div class="tkt-hdr">
+        <div class="tkt-hdr-left"><span class="tick">✅</span><h2>Saved to MySQL ✓</h2></div>
+        <div class="tkt-hdr-right"><div class="bid-label">Booking ID</div><div class="bid-val">${bookingId}</div></div>
+      </div>
+      <div class="tkt-route">
+        <span class="tkt-city">${searchParams.from}</span>
+        <span class="tkt-arrow">→</span>
+        <span class="tkt-city">${searchParams.to}</span>
+      </div>
+      <div class="tkt-fields">
+        <div class="tkt-f"><div class="lbl">Passenger</div><div class="val">${searchParams.name}</div></div>
+        <div class="tkt-f"><div class="lbl">Travel Date</div><div class="val">${dateStr}</div></div>
+        <div class="tkt-f"><div class="lbl">Bus</div><div class="val">${currentBus.name}</div></div>
+        <div class="tkt-f"><div class="lbl">Operator</div><div class="val">${currentBus.operator_name||'—'}</div></div>
+        <div class="tkt-f"><div class="lbl">Type</div><div class="val">${currentBus.type}</div></div>
+        <div class="tkt-f"><div class="lbl">Departure</div><div class="val">${currentBus.departure}</div></div>
+        <div class="tkt-f"><div class="lbl">Seat Numbers</div><div class="val">${seatStr}</div></div>
+        <div class="tkt-f"><div class="lbl">Passenger ID</div><div class="val" style="color:var(--cyan);font-family:var(--font-mono)">${newPassId}</div></div>
+      </div>
+      <div class="tkt-footer">
+        <div class="tkt-total">₹${totalPrice.toLocaleString('en-IN')}<sub> total</sub></div>
+        <button class="new-bk-btn" onclick="newBooking()">+ New Booking</button>
+      </div>`;
+
+    closeModal();
+    document.getElementById('results-sec').style.display = 'none';
+    const cs = document.getElementById('confirm-sec');
+    cs.style.display = 'block';
+    cs.scrollIntoView({behavior:'smooth',block:'start'});
+    showToast('🎉 Booking saved to MySQL!');
+    loadStats();
+
+  } catch {
+    showToast('❌ Failed to save booking to MySQL');
+    btn.disabled = false; btn.textContent = 'Confirm & Save to MySQL';
+  }
+}
+
+function newBooking() {
+  document.getElementById('confirm-sec').style.display = 'none';
+  document.getElementById('results-sec').style.display = 'none';
+  document.querySelector('.booking-card').scrollIntoView({behavior:'smooth'});
+  document.getElementById('pname').value = '';
+  ['fcity','tcity','npax','btype','tdate'].forEach(id => document.getElementById(id).value = '');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
